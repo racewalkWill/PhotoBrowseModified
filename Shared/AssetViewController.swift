@@ -34,6 +34,8 @@ class AssetViewController: UIViewController {
     fileprivate lazy var formatIdentifier = Bundle.main.bundleIdentifier!
     fileprivate let formatVersion = "1.0"
     fileprivate lazy var ciContext = CIContext()
+
+    let depthBlurFilterName = "CIDepthBlurEffect"
     
     // MARK: UIViewController / Life Cycle
     
@@ -121,6 +123,8 @@ class AssetViewController: UIViewController {
         // Allow editing only if the PHAsset supports edit operations.
         if asset.canPerform(.content) {
             // Add actions for some canned filters.
+            alertController.addAction(UIAlertAction(title: NSLocalizedString("Depth Blur", comment: ""),
+                                                    style: .default, handler: getFilter(depthBlurFilterName)))
             alertController.addAction(UIAlertAction(title: NSLocalizedString("Sepia Tone", comment: ""),
                                                     style: .default, handler: getFilter("CISepiaTone")))
             alertController.addAction(UIAlertAction(title: NSLocalizedString("Chrome", comment: ""),
@@ -134,14 +138,28 @@ class AssetViewController: UIViewController {
         present(alertController, animated: true)
     }
 
+    func noDepthAlert() {
+        // notify user that this photo does not have depth
+
+        #if os(iOS)
+        let alert = UIAlertController(title: "Depth", message: "Image does not have depth.", preferredStyle: .alert)
+        alert.addAction(UIAlertAction(title: NSLocalizedString("OK", comment: "Default action"), style: .default, handler: { _ in
+        NSLog("The \"OK\" alert occured.")
+        }))
+        self.present(alert, animated: true, completion: nil)
+        #endif
+
+
+    }
 
     @IBAction func showDepthBtn(_ sender: UIBarButtonItem) {
         // show the depth data from portrait mode from
         // iPhone 7 Plus and later camera
-       requestDepthMap(selectedAsset: asset)
+        requestDepthMap(selectedAsset: asset)
+        
     }
 
-    func requestDepthMap(selectedAsset: PHAsset)  {
+    func requestDepthMap(selectedAsset: PHAsset)   {
        // may not have depthData in many cases
        // PH completionHandler may be invoked multiple times
        var auxImage: CIImage?
@@ -153,6 +171,10 @@ class AssetViewController: UIViewController {
                     return
                }
             auxImage = CIImage(contentsOf: input.fullSizeImageURL!, options: [CIImageOption.auxiliaryDepth: true])
+        if auxImage == nil {
+            self.noDepthAlert()
+            return
+        }
         var depthData = auxImage?.depthData
         if depthData?.depthDataType != kCVPixelFormatType_DisparityFloat16 {
             // convert to half-float
@@ -404,18 +426,57 @@ class AssetViewController: UIViewController {
         }
         return applyFilter
     }
+
+    func applyDepthFilter(inputImage: CIImage, input: PHContentEditingInput, output: PHContentEditingOutput) -> CIImage {
+        // load and apply the depth info into the CIDepthBlurEffect
+
+        if let auxImage = CIImage(contentsOf: input.fullSizeImageURL!, options: [CIImageOption.auxiliaryDisparity: true]) {
+            var depthData = auxImage.depthData
+
+            if depthData?.depthDataType != kCVPixelFormatType_DisparityFloat32 {
+                //  normalize seems to expect float32..
+                depthData = depthData?.converting(toDepthDataType: kCVPixelFormatType_DisparityFloat32)
+            }
+            _ = depthData?.depthDataMap.setUpNormalize()  // vector processing method in Accelerate framework
+
+            // now convert to half float Float16
+            depthData = depthData?.converting(toDepthDataType: kCVPixelFormatType_DisparityFloat16)
+
+            // the special constructor for depthBlur
+            let filter = ciContext.depthBlurEffectFilter(for: inputImage,
+                                                         disparityImage: auxImage,
+                                                         portraitEffectsMatte: nil,
+                                                         // the orientation of your input image
+                                                         orientation: CGImagePropertyOrientation(rawValue: CGImagePropertyOrientation.RawValue(input.fullSizeImageOrientation))!,
+                                                         options: nil)!
+            filter.setValue(4, forKey: "inputAperture")
+            filter.setValue(0.5, forKey: "inputScaleFactor")
+            filter.setValue(CIVector(x: 0, y: 100, z: 100, w: 100), forKey: "inputFocusRect")
+            return filter.outputImage!
+
+        } else {
+            noDepthAlert()
+            return inputImage
+        }
+
+
+    }
     
     func applyPhotoFilter(_ filterName: String, input: PHContentEditingInput, output: PHContentEditingOutput, completion: () -> Void) {
-        
+        var outputImage: CIImage
         // Load the full-size image.
         guard let inputImage = CIImage(contentsOf: input.fullSizeImageURL!)
             else { fatalError("Can't load the input image to edit.") }
         
         // Apply the filter.
-        let outputImage = inputImage
+        if filterName == depthBlurFilterName {
+            outputImage = applyDepthFilter(inputImage: inputImage, input: input, output: output)
+        } else {
+            outputImage = inputImage
             .oriented(forExifOrientation: input.fullSizeImageOrientation)
             .applyingFilter(filterName, parameters: [:])
-        
+        }
+
         // Write the edited image as a JPEG.
         do {
             try self.ciContext.writeJPEGRepresentation(of: outputImage,
