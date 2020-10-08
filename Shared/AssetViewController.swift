@@ -133,6 +133,50 @@ class AssetViewController: UIViewController {
         // Present the UIAlertController.
         present(alertController, animated: true)
     }
+
+
+    @IBAction func showDepthBtn(_ sender: UIBarButtonItem) {
+        // show the depth data from portrait mode from
+        // iPhone 7 Plus and later camera
+       requestDepthMap(selectedAsset: asset)
+    }
+
+    func requestDepthMap(selectedAsset: PHAsset)  {
+       // may not have depthData in many cases
+       // PH completionHandler may be invoked multiple times
+       var auxImage: CIImage?
+       let options = PHContentEditingInputRequestOptions()
+
+       selectedAsset.requestContentEditingInput(with: options, completionHandler: { input, info in
+           guard let input = input
+               else { NSLog ("contentEditingInput not loaded")
+                    return
+               }
+            auxImage = CIImage(contentsOf: input.fullSizeImageURL!, options: [CIImageOption.auxiliaryDepth: true])
+        var depthData = auxImage?.depthData
+        if depthData?.depthDataType != kCVPixelFormatType_DisparityFloat16 {
+            // convert to half-float
+            depthData = depthData?.converting(toDepthDataType: kCVPixelFormatType_DisparityFloat16)
+        }
+        let normalImage = CIImage(image: (self.imageView.image!))
+        let disparityImage = auxImage?.applyingFilter("CIDepthToDisparity")
+        let scaledDisparityImage = disparityImage?.applyingFilter("CIEdgePreserveUpsampleFilter",
+                                                parameters: ["inputImage": normalImage as Any ,"inputSmallImage": auxImage as Any])
+
+        // now compute min/max and normalize?
+        // see sample app "Finding the Sharpest Image in a Sequence of Captured Images" app named "AccelerateBlurDetection"
+        // for vDSP_normalize usage
+        // convert scaledImage to CGImage and normalize
+        let orientedCIImage = scaledDisparityImage?.oriented(forExifOrientation: input.fullSizeImageOrientation)
+            if auxImage != nil {
+                let uiImage = UIImage(ciImage: orientedCIImage! )
+
+                self.imageView.image = uiImage
+            }
+
+       } )
+   }
+
     #if os(tvOS)
     @IBAction func playLivePhoto(_ sender: Any) {
         livePhotoView.startPlayback(with: .full)
@@ -193,12 +237,12 @@ class AssetViewController: UIViewController {
             // Remove the asset from the selected album.
             PHPhotoLibrary.shared().performChanges({
                 let request = PHAssetCollectionChangeRequest(for: self.assetCollection)!
-                request.removeAssets([self.asset] as NSArray)
+                request.removeAssets([self.asset as Any] as NSArray)
             }, completionHandler: completion)
         } else {
             // Delete the asset from the photo library.
             PHPhotoLibrary.shared().performChanges({
-                PHAssetChangeRequest.deleteAssets([self.asset] as NSArray)
+                PHAssetChangeRequest.deleteAssets([self.asset as Any] as NSArray)
             }, completionHandler: completion)
         }
     }

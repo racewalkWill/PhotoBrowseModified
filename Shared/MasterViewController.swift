@@ -110,6 +110,7 @@ class MasterViewController: UITableViewController {
             }
             
             // configure the view controller with the asset collection
+            // errs on PHCollectionList
             guard let assetCollection = collection as? PHAssetCollection
                 else { fatalError("Expected an asset collection.") }
             destination.fetchResult = PHAsset.fetchAssets(in: assetCollection, options: nil)
