@@ -9,6 +9,9 @@ import UIKit
 import Photos
 import PhotosUI
 
+var OffScreenContext = CIContext.init(options: nil)
+    // global created just once
+
 class AssetViewController: UIViewController {
     
     var asset: PHAsset!
@@ -108,6 +111,25 @@ class AssetViewController: UIViewController {
     /// - Tag: EditAlert
     @IBAction func editAsset(_ sender: UIBarButtonItem) {
         // Use a UIAlertController to display editing options to the user.
+
+
+        let requiredAccessLevel: PHAccessLevel = .readWrite
+        PHPhotoLibrary.requestAuthorization(for: requiredAccessLevel) { authorizationStatus in
+            switch authorizationStatus {
+            case .limited:
+                NSLog("limited authorization granted")
+            case .authorized :
+                NSLog ("authorized")
+            case .denied , .notDetermined , .restricted :
+                    NSLog("editing fails for denied, notDetermined or restricted access to PhotoLibrary")
+                return
+            default:
+                //FIXME: Implement handling for all authorizationStatus
+                NSLog("Unimplemented \(authorizationStatus)")
+
+            }
+        }
+
         let alertController = UIAlertController(title: nil, message: nil, preferredStyle: .actionSheet)
         #if os(iOS)
         alertController.modalPresentationStyle = .popover
@@ -185,10 +207,8 @@ class AssetViewController: UIViewController {
         let scaledDisparityImage = disparityImage?.applyingFilter("CIEdgePreserveUpsampleFilter",
                                                 parameters: ["inputImage": normalImage as Any ,"inputSmallImage": auxImage as Any])
 
-        // now compute min/max and normalize?
-        // see sample app "Finding the Sharpest Image in a Sequence of Captured Images" app named "AccelerateBlurDetection"
-        // for vDSP_normalize usage
-        // convert scaledImage to CGImage and normalize
+
+        // convert scaledImage to CGImage
         let orientedCIImage = scaledDisparityImage?.oriented(forExifOrientation: input.fullSizeImageOrientation)
             if auxImage != nil {
                 let uiImage = UIImage(ciImage: orientedCIImage! )
@@ -415,10 +435,11 @@ class AssetViewController: UIViewController {
                     applyFunc(filterName, input, output, {
                         // When the app finishes rendering the filtered result, commit the edit to the photo library.
                         PHPhotoLibrary.shared().performChanges({
+                            NSLog("AssetViewController #applyFilter asset = \(String(describing: self.asset))")
                             let request = PHAssetChangeRequest(for: self.asset)
                             request.contentEditingOutput = output
                         }, completionHandler: { success, error in
-                            if !success { print("Can't edit the asset: \(String(describing: error))") }
+                            if !success { NSLog("Can't edit the asset: \(String(describing: error))") }
                         })
                     })
                 }
@@ -430,7 +451,7 @@ class AssetViewController: UIViewController {
     func applyDepthFilter(inputImage: CIImage, input: PHContentEditingInput, output: PHContentEditingOutput) -> CIImage {
         // load and apply the depth info into the CIDepthBlurEffect
 
-        if let auxImage = CIImage(contentsOf: input.fullSizeImageURL!, options: [CIImageOption.auxiliaryDisparity: true]) {
+        if let auxImage = CIImage(contentsOf: input.fullSizeImageURL!, options: [CIImageOption.auxiliaryDepth: true]) {
             var depthData = auxImage.depthData
 
             if depthData?.depthDataType != kCVPixelFormatType_DisparityFloat32 {
@@ -449,10 +470,18 @@ class AssetViewController: UIViewController {
                                                          // the orientation of your input image
                                                          orientation: CGImagePropertyOrientation(rawValue: CGImagePropertyOrientation.RawValue(input.fullSizeImageOrientation))!,
                                                          options: nil)!
-            filter.setValue(4, forKey: "inputAperture")
+//            filter.setValue(4, forKey: "inputAperture")
             filter.setValue(0.5, forKey: "inputScaleFactor")
-            filter.setValue(CIVector(x: 0, y: 100, z: 100, w: 100), forKey: "inputFocusRect")
-            return filter.outputImage!
+//            filter.setValue(CIVector(x: 0, y: 100, z: 100, w: 100), forKey: "inputFocusRect")
+            // not saving the output so make sure it is displayed
+
+            
+            let depthOutput = filter.outputImage!
+//            DispatchQueue.main.sync {
+//                self.imageView.image = UIImage(ciImage: depthOutput )
+//
+//            }
+            return depthOutput
 
         } else {
             noDepthAlert()
@@ -478,6 +507,9 @@ class AssetViewController: UIViewController {
         }
 
         // Write the edited image as a JPEG.
+        _ = OffScreenContext.createCGImage(outputImage, from: outputImage.extent)
+        // renders CIImage
+
         do {
             try self.ciContext.writeJPEGRepresentation(of: outputImage,
                                                        to: output.renderedContentURL, colorSpace: inputImage.colorSpace!, options: [:])

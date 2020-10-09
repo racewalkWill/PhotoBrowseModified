@@ -38,7 +38,7 @@ import Accelerate
 // are output as a CGImage. See workFlow documentation in Accelerate/vImage
 
 extension CVPixelBuffer {
-    func normalize(updateBuffer: Bool) {
+    func normalize(updateBuffer: Bool) -> Bool {
     let width = CVPixelBufferGetWidth(self)
     let height = CVPixelBufferGetHeight(self)
     
@@ -67,13 +67,14 @@ extension CVPixelBuffer {
 
     if updateBuffer {
             let range = maxPixel - minPixel
-            NSLog("CVPixelBuffer #normalize start maxPixel = \(maxPixel), min = \(minPixel) range = \(range)")
+            NSLog("CVPixelBuffer #normalize  maxPixel = \(maxPixel), min = \(minPixel) range = \(range)")
             for y in stride(from: 0, to: height, by: 1) {
               for x in stride(from: 0, to: width, by: 1) {
                 let pixel = pixelBuffer[y * width + x]
                 pixelBuffer[y * width + x] = (pixel - minPixel) / range
               }
             }
+
     }
 
  // check for new values
@@ -87,17 +88,18 @@ extension CVPixelBuffer {
       }
     }
     let newRange = maxPixel - minPixel
-     NSLog("CVPixelBuffer #normalize finish maxPixel = \(maxPixel), min = \(minPixel) range = \(newRange)")
+     NSLog("CVPixelBuffer #normalize maxPixel = \(maxPixel), min = \(minPixel) range = \(newRange)")
 
 
     CVPixelBufferUnlockBaseAddress(self, CVPixelBufferLockFlags(rawValue: 0))
-
+    return updateBuffer
   }
 
     func setUpNormalize() -> CVPixelBuffer {
         // grayscale buffer float32 ie Float
         // return normalized CVPixelBuffer
-        normalize(updateBuffer: false) // log starting condition
+        if !normalize(updateBuffer: true) // log starting condition
+        {
         CVPixelBufferLockBaseAddress(self,
                                      CVPixelBufferLockFlags(rawValue: 0))
         let width = CVPixelBufferGetWidthOfPlane(self, 0)
@@ -125,7 +127,8 @@ extension CVPixelBuffer {
         lumaCopy.deallocate()
         CVPixelBufferUnlockBaseAddress(self, CVPixelBufferLockFlags(rawValue: 0))
 
-        normalize(updateBuffer: false) // log ending condition
+        _ = normalize(updateBuffer: false) // log ending condition
+        }
 
         return self
 
