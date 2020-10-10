@@ -9,8 +9,6 @@ import UIKit
 import Photos
 import PhotosUI
 
-var OffScreenContext = CIContext.init(options: nil)
-    // global created just once
 
 class AssetViewController: UIViewController {
     
@@ -506,10 +504,11 @@ class AssetViewController: UIViewController {
             .applyingFilter(filterName, parameters: [:])
         }
 
-        // Write the edited image as a JPEG.
-        _ = OffScreenContext.createCGImage(outputImage, from: outputImage.extent)
-        // renders CIImage
 
+        // render the CIImage before write
+        _ = self.ciContext.createCGImage(outputImage, from: outputImage.extent)
+
+        // Write the edited image as a JPEG.
         do {
             try self.ciContext.writeJPEGRepresentation(of: outputImage,
                                                        to: output.renderedContentURL, colorSpace: inputImage.colorSpace!, options: [:])
