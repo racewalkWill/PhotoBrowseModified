@@ -450,20 +450,25 @@ class AssetViewController: UIViewController {
         // load and apply the depth info into the CIDepthBlurEffect
 
         if let auxImage = CIImage(contentsOf: input.fullSizeImageURL!, options: [CIImageOption.auxiliaryDepth: true]) {
-            var depthData = auxImage.depthData
+            let auxOrientedImage = auxImage.oriented(forExifOrientation: input.fullSizeImageOrientation)
+            var depthData = auxOrientedImage.depthData!
 
-            if depthData?.depthDataType != kCVPixelFormatType_DisparityFloat32 {
+            if depthData.depthDataType != kCVPixelFormatType_DisparityFloat32 {
                 //  normalize seems to expect float32..
-                depthData = depthData?.converting(toDepthDataType: kCVPixelFormatType_DisparityFloat32)
+                depthData = depthData.converting(toDepthDataType: kCVPixelFormatType_DisparityFloat32)
             }
-            _ = depthData?.depthDataMap.setUpNormalize()  // vector processing method in Accelerate framework
 
+            let normalizedMap = depthData.depthDataMap.setUpNormalize(pixelFormat: depthData.depthDataType)
+            // vector processing method in Accelerate framework
+//            let result = try? depthData.replacingDepthDataMap(with: normalizedMap)
+//            if result == nil {  fatalError("applyDepthFilter failed to replace with normalized depth map")}
+            
             // now convert to half float Float16
-            depthData = depthData?.converting(toDepthDataType: kCVPixelFormatType_DisparityFloat16)
+            depthData = depthData.converting(toDepthDataType: kCVPixelFormatType_DisparityFloat16)
 
             // the special constructor for depthBlur
             let filter = ciContext.depthBlurEffectFilter(for: inputImage,
-                                                         disparityImage: auxImage,
+                                                         disparityImage: auxOrientedImage,
                                                          portraitEffectsMatte: nil,
                                                          // the orientation of your input image
                                                          orientation: CGImagePropertyOrientation(rawValue: CGImagePropertyOrientation.RawValue(input.fullSizeImageOrientation))!,
@@ -475,10 +480,10 @@ class AssetViewController: UIViewController {
 
             
             let depthOutput = filter.outputImage!
-//            DispatchQueue.main.sync {
-//                self.imageView.image = UIImage(ciImage: depthOutput )
-//
-//            }
+            DispatchQueue.main.sync {
+                self.imageView.image = UIImage(ciImage: depthOutput )
+
+            }
             return depthOutput
 
         } else {
@@ -497,7 +502,8 @@ class AssetViewController: UIViewController {
         
         // Apply the filter.
         if filterName == depthBlurFilterName {
-            outputImage = applyDepthFilter(inputImage: inputImage, input: input, output: output)
+            let sourceDepthImage = inputImage.oriented(forExifOrientation: input.fullSizeImageOrientation)
+            outputImage = applyDepthFilter(inputImage: sourceDepthImage, input: input, output: output)
         } else {
             outputImage = inputImage
             .oriented(forExifOrientation: input.fullSizeImageOrientation)
