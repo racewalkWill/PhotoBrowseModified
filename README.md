@@ -1,3 +1,12 @@
+# Modifications to Apple Sample App PhotoBrowse 
+at https://developer.apple.com/documentation/photokit/browsing_and_modifying_photo_albums
+
+# Changes
+1. Filters applied to a photo did not save due to missing offscreen render in func applyPhotoFilter
+2. Added AssetViewController button 'Depth' to demonstrate loading of depth/disparity data and the use of the CIDepthBlurEffect filter.
+3. Used the Accelerate framework vDSP vector functions for normalization of disparity image to values in 0..1 range 
+4. Added very simple requiredAccessLevel for iOS14 photo privacy changes
+
 # Browsing and Modifying Photo Albums
 
 Help users organize their photos into albums and browse photo collections in a grid-based layout using PhotoKit.
