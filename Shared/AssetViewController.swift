@@ -488,6 +488,7 @@ class AssetViewController: UIViewController {
                 else { fatalError("Can't load the input image to edit.") }
 
         let sourceDepthImage = inputImage.oriented(forExifOrientation: input.fullSizeImageOrientation)
+                .applyingFilter("CILanczosScaleTransform", parameters: ["inputScale": 0.5])
 
         if let auxImage = CIImage(contentsOf: input.fullSizeImageURL!, options: [CIImageOption.auxiliaryDepth: true]) {
             let auxOrientedImage = auxImage.oriented(forExifOrientation: input.fullSizeImageOrientation)
@@ -498,7 +499,7 @@ class AssetViewController: UIViewController {
                 depthData = depthData.converting(toDepthDataType: kCVPixelFormatType_DisparityFloat32)
             }
 
-            _ = depthData.depthDataMap.setUpNormalize(pixelFormat: depthData.depthDataType)
+            _ = depthData.depthDataMap.setUpNormalize()
             // uses vector processing method in Accelerate framework
 
             // now convert to half float Float16
@@ -511,10 +512,30 @@ class AssetViewController: UIViewController {
                                                          // the orientation of your input image
                                                          orientation: CGImagePropertyOrientation(rawValue: CGImagePropertyOrientation.RawValue(input.fullSizeImageOrientation))!,
                                                          options: nil)!
-//            filter.setValue(4, forKey: "inputAperture")
-            filter.setValue(0.5, forKey: "inputScaleFactor")
-//            filter.setValue(CIVector(x: 0, y: 100, z: 100, w: 100), forKey: "inputFocusRect")
 
+
+//                ▿ 15 inputParms // two are required
+//            filter.setValue(, forKey: "inputImage") // downsample input by 2, then input scale factor 0.5
+//            filter.setValue(, forKey: "inputDisparityImage") // filter will upSample internally as needed
+
+            // these are optional and may be analyzed internally in the filter
+//            filter.setValue(, forKey:  "inputMatteImage")
+//            filter.setValue(, forKey: "inputHairImage") // see enabledSemanticSegmentationMatteTypes (hair, skin, and teeth)
+            filter.setValue(4, forKey: "inputAperture")  // 1 to 22
+//            filter.setValue(, forKey:  "inputLeftEyePositions")
+                    // from Vision face feature detection,  set with vector of up to 4 faces
+                    // for three faces use vector of 6 floating point values of x,y,x,y,x,y
+//            filter.setValue(, forKey:  "inputRightEyePositions")
+//            filter.setValue(, forKey: "inputChinPositions")
+//            filter.setValue(, forKey: "inputNosePositions")
+//          filter.setValue(CIVector(x: 0.3, y: 0.3, z: 0.2, w: 0.2), forKey: "inputFocusRect") // LLO coordinates normalized
+//            filter.setValue(, forKey: "inputLumaNoiseScale")
+//            filter.setValue(0.5, forKey: "inputScaleFactor")  // when input is downsampled by 2
+//            filter.setValue(, forKey: "inputCalibrationData")
+//            filter.setValue(, forKey: "inputAuxDataMetadata")
+//              filter.setValue("Rectangle", forKey: "inputShape" ) // not sure about this...
+
+            // assume that ciContext create with CIContext(options: [kCIContextWorkingFormat : kCIFormatRGHAh ]  half floats
             let depthOutput = filter.outputImage!
 
             // skip the save to the library... just show the output
@@ -547,7 +568,10 @@ class AssetViewController: UIViewController {
         // Write the edited image as a JPEG.
         do {
             try self.ciContext.writeJPEGRepresentation(of: outputImage,
-                                                       to: output.renderedContentURL, colorSpace: inputImage.colorSpace!, options: [:])
+                to: output.renderedContentURL, colorSpace: inputImage.colorSpace!, options: [:])
+            //  if changing depth data then add to the writeJPEGRepresentation this option
+            //  options: [kIImageRepresentationDisparityImage : disparityImage
+
         } catch let error {
             fatalError("Can't apply the filter to the image: \(error).")
         }

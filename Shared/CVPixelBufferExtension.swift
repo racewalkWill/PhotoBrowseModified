@@ -37,7 +37,7 @@ extension CVPixelBuffer {
         return result
     }
 
-    func setUpNormalize(pixelFormat: OSType) -> CVPixelBuffer {
+    func setUpNormalize() -> CVPixelBuffer {
         // grayscale buffer float32 ie Float
         // return normalized CVPixelBuffer
 
