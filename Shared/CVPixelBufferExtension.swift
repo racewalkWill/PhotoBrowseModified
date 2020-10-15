@@ -51,18 +51,12 @@ extension CVPixelBuffer {
             // UnsafeMutableRawPointer
 
         let pixelBufferBase  = unsafeBitCast(bufferBaseAddress, to: UnsafeMutablePointer<Float>.self)
+        let pixelBufferPointer = UnsafeMutableBufferPointer<Float>(start: pixelBufferBase, count: count)
 
-        let depthCopy  =   UnsafeMutablePointer<Float>.allocate(capacity: count)
-        depthCopy.initialize(from: pixelBufferBase, count: count)
-        let depthCopyBuffer = UnsafeMutableBufferPointer<Float>(start: depthCopy, count: count)
-
-        let normalizedDisparity = vectorNormalize(targetVector: depthCopyBuffer)
+        let normalizedDisparity = vectorNormalize(targetVector: pixelBufferPointer)
 
         pixelBufferBase.initialize(from: normalizedDisparity, count: count)
             // copy back the normalized map into the CVPixelBuffer
-
-        depthCopy.deallocate()
-//        depthCopyBuffer.deallocate()
 
         CVPixelBufferUnlockBaseAddress(self, CVPixelBufferLockFlags(rawValue: 0))
 
